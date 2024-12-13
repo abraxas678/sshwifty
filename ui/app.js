@@ -49,6 +49,7 @@ const mainTemplate = `
   :connection="socket"
   :controls="controls"
   :commands="commands"
+  :server-message="serverMessage"
   :preset-data="presetData.presets"
   :restricted-to-presets="presetData.restricted"
   :view-port="viewPort"
@@ -62,7 +63,7 @@ const mainTemplate = `
   :error="authErr"
   @auth="submitAuth"
 ></auth>
-<loading v-else :error="loadErr"></loading>
+<loading class="app-error-message" v-else :error="loadErr"></loading>
 `.trim();
 
 const socksInterface = "/sshwifty/socket";
@@ -76,7 +77,7 @@ function startApp(rootEl) {
 
   function getCurrentKeyMixer() {
     return Number(
-      Math.trunc(new Date().getTime() / socksKeyTimeTruncater)
+      Math.trunc(new Date().getTime() / socksKeyTimeTruncater),
     ).toString();
   }
 
@@ -84,8 +85,8 @@ function startApp(rootEl) {
     return new Uint8Array(
       await cipher.hmac512(
         stream.buildBufferFromString(privateKey),
-        stream.buildBufferFromString(getCurrentKeyMixer())
-      )
+        stream.buildBufferFromString(getCurrentKeyMixer()),
+      ),
     ).slice(0, 16);
   }
 
@@ -110,6 +111,7 @@ function startApp(rootEl) {
             : "",
         page: "loading",
         key: "",
+        serverMessage: "",
         presetData: {
           presets: new Presets([]),
           restricted: false,
@@ -164,7 +166,7 @@ function startApp(rootEl) {
         self.$nextTick(() => {
           self.viewPort.dim.renew(
             self.viewPortUpdaters.width,
-            self.viewPortUpdaters.height
+            self.viewPortUpdaters.height,
           );
         });
       };
@@ -200,7 +202,7 @@ function startApp(rootEl) {
         }
 
         return new Uint8Array(
-          await cipher.hmac512(enc.encode(finalKey), enc.encode(rTime))
+          await cipher.hmac512(enc.encode(finalKey), enc.encode(rTime)),
         ).slice(0, 32);
       },
       buildBackendSocketURLs() {
@@ -228,18 +230,22 @@ function startApp(rootEl) {
           this.buildBackendSocketURLs(),
           key,
           dialTimeout * 1000,
-          heartbeatInterval * 1000
+          heartbeatInterval * 1000,
         );
       },
       executeHomeApp(authResult, key) {
+        let authData = JSON.parse(authResult.data);
+        this.serverMessage = authData.server_message
+          ? authData.server_message
+          : "";
         this.presetData = {
-          presets: new Presets(JSON.parse(authResult.data)),
+          presets: new Presets(authData.presets ? authData.presets : []),
           restricted: authResult.onlyAllowPresetRemotes,
         };
         this.socket = this.buildSocket(
           key,
           authResult.timeout,
-          authResult.heartbeat
+          authResult.heartbeat,
         );
         this.page = "app";
       },
@@ -282,17 +288,30 @@ function startApp(rootEl) {
           let result = await this.doAuth("");
 
           if (result.date) {
-            let serverTime = result.date.getTime(),
-              clientTime = new Date().getTime(),
-              timeDiff = Math.abs(serverTime - clientTime);
+            let serverRespondTime = result.date,
+              serverRespondTimestamp = serverRespondTime.getTime(),
+              clientCurrent = new Date(),
+              clientTimestamp = clientCurrent.getTime(),
+              timeDiff = Math.abs(serverRespondTimestamp - clientTimestamp);
 
             if (timeDiff > maxTimeDiff) {
               this.loadErr =
-                "The time difference between this client " +
-                "and the backend server is beyond operational limit.\r\n\r\n" +
-                "Please try reload the page, and if the problem persisted, " +
-                "consider to adjust your local time so both the client and " +
-                "the server are running at same date time";
+                "The datetime difference between current client " +
+                "and the Sshwifty server is beyond the operational tolerance." +
+                "\r\n\r\n" +
+                "The server time was " +
+                serverRespondTime +
+                ", and the client time was " +
+                clientCurrent +
+                ", resulted a " +
+                timeDiff +
+                "ms time difference, exceeding the " +
+                "limitation of " +
+                maxTimeDiff +
+                "ms.\r\n\r\n" +
+                "Try reload the page, see if the problem persists. And if " +
+                "it did, please make sure both the server and the client are " +
+                "having the correct time settings";
 
               return;
             }
@@ -309,7 +328,7 @@ function startApp(rootEl) {
                     throw new Error(
                       "Unable to fetch key from remote, unexpected " +
                         "error code: " +
-                        result.result
+                        result.result,
                     );
                   }
 
@@ -352,12 +371,12 @@ function startApp(rootEl) {
                     throw new Error(
                       "Unable to fetch key from remote, unexpected " +
                         "error code: " +
-                        result.result
+                        result.result,
                     );
                   }
 
                   return await buildSocketKey(
-                    atob(result.key) + "+" + passphrase
+                    atob(result.key) + "+" + passphrase,
                   );
                 },
               });

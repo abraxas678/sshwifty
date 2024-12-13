@@ -54,10 +54,7 @@
             <li>
               <a class="tb-item" href="javascript:;" @click="fontSizeUp">
                 <span
-                  class="
-                    tb-key-icon tb-key-resize-icon
-                    icon icon-keyboardkey1 icon-iconed-bottom1
-                  "
+                  class="tb-key-icon tb-key-resize-icon icon icon-keyboardkey1 icon-iconed-bottom1"
                 >
                   <i>+</i>
                   Increase
@@ -67,10 +64,7 @@
             <li>
               <a class="tb-item" href="javascript:;" @click="fontSizeDown">
                 <span
-                  class="
-                    tb-key-icon tb-key-resize-icon
-                    icon icon-keyboardkey1 icon-iconed-bottom1
-                  "
+                  class="tb-key-icon tb-key-resize-icon icon icon-keyboardkey1 icon-iconed-bottom1"
                 >
                   <i>-</i>
                   Decrease
@@ -107,28 +101,47 @@
 
 <script>
 import FontFaceObserver from "fontfaceobserver";
-import { Terminal } from "xterm";
-import { WebLinksAddon } from "xterm-addon-web-links";
-// import { WebglAddon } from "xterm-addon-webgl";
-import { FitAddon } from "xterm-addon-fit";
+import { Terminal } from "@xterm/xterm";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { Unicode11Addon } from '@xterm/addon-unicode11';
+import { WebglAddon } from "@xterm/addon-webgl";
+import { FitAddon } from "@xterm/addon-fit";
 import { isNumber } from "../commands/common.js";
 import { consoleScreenKeys } from "./screen_console_keys.js";
 
 import "./screen_console.css";
-import "xterm/css/xterm.css";
+import "@xterm/xterm/css/xterm.css";
 
-const termTypeFaces = "PureNerdFont, Hack";
-const termFallbackTypeFace = "\"Cascadia Code\" , monospace";
+const termTypeFaces = "Hack, PureNerdFont";
+const termFallbackTypeFace = '"Cascadia Code" , monospace';
 const termTypeFaceLoadTimeout = 3000;
 const termTypeFaceLoadError =
-  'Remote font ' +
+  "Remote font " +
   termTypeFaces +
-  ' is unavailable, using ' +
+  " is unavailable, using " +
   termFallbackTypeFace +
-  ' instead until the remote font is loaded';
+  " instead until the remote font is loaded";
 const termDefaultFontSize = 16;
 const termMinFontSize = 8;
 const termMaxFontSize = 36;
+
+function webglSupported() {
+  try {
+    if (typeof window !== "object") {
+      return false;
+    }
+    if (typeof window.WebGLRenderingContext !== "function") {
+      return false;
+    }
+    if (typeof window.WebGL2RenderingContext !== "function") {
+      return false;
+    }
+    return document.createElement('canvas').getContext('webgl') &&
+      document.createElement('canvas').getContext('webgl2');
+  } catch(e) {
+  }
+  return false;
+}
 
 class Term {
   constructor(control) {
@@ -144,6 +157,8 @@ class Term {
       cursorStyle: "block",
       fontFamily: termTypeFaces + ", " + termFallbackTypeFace,
       fontSize: this.fontSize,
+      letterSpacing: 1,
+      lineHeight: 1.3,
       logLevel: process.env.NODE_ENV === "development" ? "info" : "off",
       theme: {
         background: this.control.activeColor(),
@@ -234,19 +249,13 @@ class Term {
     this.term.open(root);
     this.term.loadAddon(this.fit);
     this.term.loadAddon(new WebLinksAddon());
-    // TODO: Uncomment this after WebGL render is tested working and could
-    //       improve the performance, which is not yet the case during my last
-    //       revisit.
-    // if (() => {
-    //   try {
-    //     return !!window.WebGLRenderingContext && 
-    //       document.createElement('canvas').getContext('webgl');
-    //   } catch(e) {
-    //      return false;
-    //   }
-    // }) {
-    //   this.term.loadAddon(new WebglAddon());
-    // }
+    this.term.loadAddon(new Unicode11Addon());
+    try {
+      if (webglSupported()) {
+        this.term.loadAddon(new WebglAddon());
+      }
+    } catch(e) {}
+    this.term.unicode.activeVersion = '11';
     this.refit();
   }
 
@@ -261,29 +270,7 @@ class Term {
     }
   }
 
-  writeEchoStr(d) {
-    if (this.closed) {
-      return;
-    }
-    this.control.send(d);
-    if (!this.control.echo()) {
-      return;
-    }
-    this.writeStr(d);
-  }
-
   writeStr(d) {
-    if (this.closed) {
-      return;
-    }
-    try {
-      this.term.write(d);
-    } catch (e) {
-      process.env.NODE_ENV === "development" && console.trace(e);
-    }
-  }
-
-  write(d) {
     if (this.closed) {
       return;
     }
@@ -460,10 +447,12 @@ export default {
       const tfs = typefaces.split(",");
       let observers = [];
       for (let v in tfs) {
-        observers.push(new FontFaceObserver(tfs[v].trim()).load(null, timeout))
-        observers.push(new FontFaceObserver(tfs[v].trim(), {
-          weight: "bold",
-        }).load(null, timeout))
+        observers.push(new FontFaceObserver(tfs[v].trim()).load(null, timeout));
+        observers.push(
+          new FontFaceObserver(tfs[v].trim(), {
+            weight: "bold",
+          }).load(null, timeout),
+        );
       }
       return Promise.all(observers);
     },
@@ -474,7 +463,10 @@ export default {
           onSuccess(await self.loadRemoteFont(typefaces, timeout));
           return;
         } catch (e) {
-          // Retry
+          // Wait and then retry
+          await new Promise(res => {
+            window.setTimeout(() => { res(); }, timeout);
+          });
         }
       }
     },
@@ -527,7 +519,7 @@ export default {
               toDismiss: toDismiss,
             });
           },
-        }
+        },
       );
 
       if (self.term.destroyed()) {
@@ -556,18 +548,14 @@ export default {
       if (this.runner !== null) {
         return;
       }
-
       let self = this;
-
       this.runner = (async () => {
         try {
           for (;;) {
             if (self.term.destroyed()) {
               break;
             }
-
-            self.term.write(await this.control.receive());
-
+            self.term.writeStr(await this.control.receive());
             self.$emit("updated");
           }
         } catch (e) {
