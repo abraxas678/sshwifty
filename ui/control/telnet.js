@@ -238,7 +238,7 @@ class Parser {
                 this.callbacks.setEcho(true);
                 break;
             }
-          }
+          },
         );
 
       case optSuppressGoAhead:
@@ -248,7 +248,7 @@ class Parser {
           this.options.suppressGoAhead,
           (d, _action) => {
             this.options.suppressGoAhead = d;
-          }
+          },
         );
 
       case optNAWS:
@@ -334,35 +334,14 @@ class Control {
   constructor(data, color) {
     this.colorM = color;
     this.colors = this.colorM.get();
-
     this.charset = data.charset;
 
-    if (this.charset === "utf-8") {
-      let enc = new TextEncoder();
-
-      this.charsetDecoder = (d) => {
-        return d;
-      };
-
-      this.charsetEncoder = (dStr) => {
-        return enc.encode(dStr);
-      };
-    } else {
-      let dec = new TextDecoder(this.charset),
-        enc = new TextEncoder();
-
-      this.charsetDecoder = (d) => {
-        return enc.encode(
-          dec.decode(d, {
-            stream: true,
-          })
-        );
-      };
-
-      this.charsetEncoder = (dStr) => {
-        return iconv.encode(dStr, this.charset);
-      };
-    }
+    this.charsetDecoder = (d) => {
+      return iconv.decode(d, this.charset);
+    };
+    this.charsetEncoder = (dStr) => {
+      return iconv.encode(dStr, this.charset);
+    };
 
     this.sender = data.send;
     this.closer = data.close;
@@ -389,7 +368,7 @@ class Control {
         getWindowDim() {
           return self.windowDim;
         },
-      }
+      },
     );
 
     let runWait = this.parser.run();

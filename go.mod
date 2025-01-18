@@ -17,11 +17,12 @@
 
 module github.com/nirui/sshwifty
 
-go 1.13
+go 1.22.11
 
 require (
-	github.com/gorilla/websocket v1.5.0
-	golang.org/x/crypto v0.9.0
-	golang.org/x/net v0.10.0
-	golang.org/x/sys v0.8.0 // indirect
+	github.com/gorilla/websocket v1.5.3
+	golang.org/x/crypto v0.32.0
+	golang.org/x/net v0.34.0
 )
+
+require golang.org/x/sys v0.29.0 // indirect
